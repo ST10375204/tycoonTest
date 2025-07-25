@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "crDm3eYqd1E=",
+  "dgSpecHash": "BhZ+Du9bljo=",
   "success": true,
-  "projectFilePath": "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
+  "projectFilePath": "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\lab_services_student\\.nuget\\packages\\microsoft.aspnetcore.openapi\\9.0.1\\microsoft.aspnetcore.openapi.9.0.1.nupkg.sha512",
     "C:\\Users\\lab_services_student\\.nuget\\packages\\microsoft.openapi\\1.6.17\\microsoft.openapi.1.6.17.nupkg.sha512"

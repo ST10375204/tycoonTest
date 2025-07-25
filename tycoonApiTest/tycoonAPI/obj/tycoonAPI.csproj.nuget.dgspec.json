@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj": {}
+    "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj": {}
   },
   "projects": {
-    "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj": {
+    "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
+        "projectUniqueName": "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
         "projectName": "tycoonAPI",
-        "projectPath": "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
+        "projectPath": "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\tycoonAPI.csproj",
         "packagesPath": "C:\\Users\\lab_services_student\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\lab_services_student\\Desktop\\tycoonApiTest\\tycoonAPI\\obj\\",
+        "outputPath": "C:\\Users\\lab_services_student\\Desktop\\tycoonTest\\tycoonApiTest\\tycoonAPI\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
