@@ -4,12 +4,12 @@ WORKDIR /src
 
 # Copy csproj and restore as distinct layers
 COPY *.sln .
-COPY MyApiProject/*.csproj ./MyApiProject/
+COPY tycoonAPI/*.csproj ./tycoonAPI/
 RUN dotnet restore
 
 # Copy the rest of the code
-COPY MyApiProject/. ./MyApiProject/
-WORKDIR /src/MyApiProject
+COPY tycoonTest/. ./tycoonAPI/
+WORKDIR /src/tycoonTest
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage
