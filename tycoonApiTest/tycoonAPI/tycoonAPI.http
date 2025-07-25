@@ -1,0 +1,6 @@
+@tycoonAPI_HostAddress = http://localhost:5158
+
+GET {{tycoonAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
