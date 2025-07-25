@@ -1,36 +1,14 @@
-# ===== Build Stage =====
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
-WORKDIR /src
-
-# 1️⃣ Copy the solution (replace `TycoonAPI.sln` with your actual .sln filename)
-COPY ["tycoon.sln", "./"]
-
-# 2️⃣ Copy your API project .csproj file (adjust paths/details to match your repo structure)
-# Example: if the project folder is `tycoonAPI`, change accordingly:
-COPY ["tycoonAPI/tycoonAPI.csproj", "tycoonApiTest/"]
-
-# 3️⃣ Restore only the project (fast cache)
-RUN dotnet restore "tycoonAPI/tycoonAPI.csproj"
-
-# 4️⃣ Copy the remaining source code
-COPY . .
-
-# 5️⃣ Set working directory to the API project folder before build/publish
-WORKDIR "/src/tycoonAPI"
-
-# 6️⃣ Build and publish to `/app/publish`
-RUN dotnet publish "tycoonAPI.csproj" -c Release -o /app/publish
-
-# ===== Runtime Stage =====
-FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
+EXPOSE 80
 
-# 7️⃣ Copy the published output into the runtime image
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
 COPY --from=build /app/publish .
-
-# 8️⃣ Set the port if you use a custom port, e.g. 8080
-# ENV ASPNETCORE_URLS=http://+:8080
-# EXPOSE 8080
-
-# 9️⃣ Entry point: replace `tycoonAPI.dll` with your actual DLL name
 ENTRYPOINT ["dotnet", "tycoonAPI.dll"]
