@@ -8,8 +8,8 @@ COPY tycoonAPI/*.csproj ./tycoonAPI/
 RUN dotnet restore
 
 # Copy the rest of the code
-COPY tycoonTest/. ./tycoonAPI/
-WORKDIR /src/tycoonTest
+COPY tycoonAPI/. ./tycoonAPI/
+WORKDIR /src/tycoonAPI
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage
