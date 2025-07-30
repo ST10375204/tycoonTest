@@ -49,9 +49,11 @@ namespace tycoonAPI.Controllers
             var client = session.Clients[id];
             var hand = session.PlayerHands[id];
 
-            await client.Response.WriteAsync($"data: Round {session.RoundNumber} starting\n\n" +
-                                             $"hand: {string.Join(", ", hand)}\n\n" +
-                                             $"position: {pos}\n\n");
+            await client.Response.WriteAsync(
+                $"data: Round {session.RoundNumber} starting\n" +
+                $"data: hand: {string.Join(", ", hand)}\n" +
+                $"data: position: {pos}\n\n"
+                        );
             await client.Response.Body.FlushAsync();
             pos++;
         }
