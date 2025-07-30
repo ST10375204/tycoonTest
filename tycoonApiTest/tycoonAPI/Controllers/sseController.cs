@@ -81,7 +81,10 @@ namespace tycoonAPI.Controllers
                 {
                     try
                     {
-                        await client.Response.WriteAsync($"data: {data}, gameId: {id}\n\n");
+                       await client.Response.WriteAsync(
+                            $"data: {data}\n" +
+                            $"data: gameId: {id}\n\n"            
+                            );
                         await client.Response.Body.FlushAsync();
                     }
                     catch
