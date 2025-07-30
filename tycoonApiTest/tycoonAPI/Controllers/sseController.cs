@@ -9,7 +9,7 @@ namespace tycoonAPI.Controllers
     {
         private static readonly ConcurrentDictionary<int, GameSession> _gameSessions = new();
 
-        [HttpGet("game")]
+        [HttpGet("gameRoom")]
         public async Task GetEvents([FromQuery] int id, CancellationToken clientToken)
         {
             Response.ContentType = "text/event-stream";
@@ -29,39 +29,15 @@ namespace tycoonAPI.Controllers
             {
                 while (!linkedToken.IsCancellationRequested)
                 {
-                    await Task.Delay(1000, linkedToken); // Heartbeat
+                    await Task.Delay(5000, linkedToken); // Heartbeat
                     await Response.WriteAsync(":\n\n");
                     await Response.Body.FlushAsync();
-                    if (!session.HasStarted && session.Clients.Count == 4)
+                    if (!session.HasStarted && session.Clients.Count == 4) //in game do stuff below
                     {
                         session.HasStarted = true;
 
-                        var deckController = new DeckController();
-                        var hands = deckController.DealAllHands(); // Deal once!
-
-                        var clientIds = session.Clients.Keys.ToList(); // Maintain join order
-                        var players = clientIds.Select((id, idx) => new { Id = id, Hand = hands[idx] }).ToList();
-                        
-                            // Find the player with 3D
-                        var firstPlayer = players.FirstOrDefault(p => p.Hand.Contains("3D"));
-
-                        var otherPlayers = players
-                           .Where(p => p.Id != firstPlayer.Id)
-                             .OrderBy(_ => Guid.NewGuid())
-                              .ToList();
-
-                        var turnOrder = new List<Guid> { firstPlayer.Id };
-                        turnOrder.AddRange(otherPlayers.Select(p => p.Id));
-
-                        int i = 0;
-                        foreach (var c in session.Clients.Values)
-                        {
-                            var playerHand = hands[i];
-                            await c.Response.WriteAsync("data: Game starting now!\n\n" + string.Join(", ", playerHand) + "\n\n"+ "position: "+
-                            "\n\n"+ string.Join(", ",  turnOrder.FindIndex(id => session.Clients[id] == c)) + "\n\n");
-                            await c.Response.Body.FlushAsync();
-                            i++;
-                        }
+                        var roundCtrl = new RoundController();
+                        roundCtrl.StartNewRound(session);
                     }
 
                 }
