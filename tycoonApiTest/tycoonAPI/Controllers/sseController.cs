@@ -18,6 +18,15 @@ namespace tycoonAPI.Controllers
 
             var session = _gameSessions.GetOrAdd(id, _ => new GameSession());
 
+            // Reject connection if 4 clients already connected
+            if (session.Clients.Count >= 4)
+            {
+                Response.StatusCode = 429; // Too Many Requests
+                await Response.WriteAsync("data: Game room is full. Connection rejected.\n\n");
+                await Response.Body.FlushAsync();
+                return;
+            }
+
             var clientId = Guid.NewGuid();
             var client = new SseClient(Response, clientToken);
             session.Clients[clientId] = client;
@@ -32,14 +41,14 @@ namespace tycoonAPI.Controllers
                     await Task.Delay(5000, linkedToken); // Heartbeat
                     await Response.WriteAsync(":\n\n");
                     await Response.Body.FlushAsync();
-                    if (!session.HasStarted && session.Clients.Count == 4) //in game do stuff below
+
+                    if (!session.HasStarted && session.Clients.Count == 4) // Start game when 4 clients are connected
                     {
                         session.HasStarted = true;
 
                         var roundCtrl = new RoundController();
                         roundCtrl.StartNewRound(session);
                     }
-
                 }
             }
             catch (TaskCanceledException) { }
@@ -47,7 +56,6 @@ namespace tycoonAPI.Controllers
             {
                 session.Clients.TryRemove(clientId, out _);
 
-                // If game started and a client disconnected, cancel all
                 if (session.HasStarted)
                 {
                     session.SharedCts.Cancel(); // Ends all loops
@@ -67,7 +75,7 @@ namespace tycoonAPI.Controllers
                 }
                 else if (session.Clients.IsEmpty)
                 {
-                    _gameSessions.TryRemove(id, out _); // Clean up idle sessions
+                    _gameSessions.TryRemove(id, out _);
                 }
             }
         }
@@ -81,10 +89,10 @@ namespace tycoonAPI.Controllers
                 {
                     try
                     {
-                       await client.Response.WriteAsync(
-                            $"data: {data}\n" +
-                            $"data: gameId: {id}\n\n"            
-                            );
+                        await client.Response.WriteAsync(
+                             $"data: {data}\n" +
+                             $"data: gameId: {id}\n\n"
+                             );
                         await client.Response.Body.FlushAsync();
                     }
                     catch
