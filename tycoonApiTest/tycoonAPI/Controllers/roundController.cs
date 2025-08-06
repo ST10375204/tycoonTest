@@ -242,6 +242,7 @@ namespace tycoonAPI.Controllers
                 {
                     type = "round_start",
                     round = session.RoundNumber,
+                    pot=session.Pot,
                     hand = session.PlayerHands[id],
                     turnOrder = session.TurnOrder,
                     turn = session.CurrentTurnPlayerId,
