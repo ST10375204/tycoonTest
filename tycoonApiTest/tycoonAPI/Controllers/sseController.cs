@@ -7,7 +7,7 @@ namespace tycoonAPI.Controllers
     [ApiController]
     public class SseController : ControllerBase
     {
-        private static readonly ConcurrentDictionary<int, GameSession> _gameSessions = new();
+        public static readonly ConcurrentDictionary<int, GameSession> _gameSessions = new();
 
         [HttpGet("gameRoom")]
         public async Task GetEvents([FromQuery] int id, CancellationToken clientToken)
@@ -18,18 +18,23 @@ namespace tycoonAPI.Controllers
 
             var session = _gameSessions.GetOrAdd(id, _ => new GameSession());
 
-            // Reject connection if 4 clients already connected
+            // Reject connection if full
             if (session.Clients.Count >= 4)
             {
-                Response.StatusCode = 429; // Too Many Requests
+                Response.StatusCode = 429;
                 await Response.WriteAsync("data: Game room is full. Connection rejected.\n\n");
                 await Response.Body.FlushAsync();
                 return;
             }
 
+            // Add new client
             var clientId = Guid.NewGuid();
             var client = new SseClient(Response, clientToken);
             session.Clients[clientId] = client;
+
+            // Notify client of their ID
+            await Response.WriteAsync($"data: yourId: {clientId}\n\n");
+            await Response.Body.FlushAsync();
 
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(clientToken, session.SharedCts.Token);
             var linkedToken = linkedCts.Token;
@@ -38,16 +43,18 @@ namespace tycoonAPI.Controllers
             {
                 while (!linkedToken.IsCancellationRequested)
                 {
-                    await Task.Delay(5000, linkedToken); // Heartbeat
+                    await Task.Delay(5000, linkedToken);
                     await Response.WriteAsync(":\n\n");
                     await Response.Body.FlushAsync();
 
-                    if (!session.HasStarted && session.Clients.Count == 4) // Start game when 4 clients are connected
+                    // Start the game when ready
+                    if (!session.HasStarted && session.Clients.Count == 4)
                     {
                         session.HasStarted = true;
 
-                        var roundCtrl = new RoundController();
-                        roundCtrl.StartNewRound(session);
+                        var roundController = new RoundController();
+                        // Start round safely
+                        _ = roundController.StartNewRound(id);
                     }
                 }
             }
@@ -58,8 +65,7 @@ namespace tycoonAPI.Controllers
 
                 if (session.HasStarted)
                 {
-                    session.SharedCts.Cancel(); // Ends all loops
-
+                    session.SharedCts.Cancel();
                     foreach (var c in session.Clients.Values)
                     {
                         try
@@ -70,7 +76,6 @@ namespace tycoonAPI.Controllers
                         }
                         catch { }
                     }
-
                     _gameSessions.TryRemove(id, out _);
                 }
                 else if (session.Clients.IsEmpty)
@@ -95,13 +100,9 @@ namespace tycoonAPI.Controllers
                              );
                         await client.Response.Body.FlushAsync();
                     }
-                    catch
-                    {
-                        // Ignore broken clients
-                    }
+                    catch { }
                 }
             }
-
             return Ok(new { status = "Message broadcasted", id, data });
         }
     }
