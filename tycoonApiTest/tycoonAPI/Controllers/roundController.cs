@@ -245,7 +245,7 @@ namespace tycoonAPI.Controllers
                     pot=session.Pot,
                     hand = session.PlayerHands[id],
                     turnOrder = session.TurnOrder,
-                    turn = session.CurrentTurnPlayerId,
+                    nextPlayer = session.CurrentTurnPlayerId,
                     position = pos
                 };
                 var data = JsonSerializer.Serialize(payload);
@@ -410,13 +410,13 @@ namespace tycoonAPI.Controllers
             var payloadForPlayer = new
             {
                 type = "exchange_result",
-                yourNewHand = session.PlayerHands[playerGuid],
+                hand = session.PlayerHands[playerGuid],
                 partnerId = partnerGuid
             };
             var payloadForPartner = new
             {
                 type = "exchange_result",
-                yourNewHand = session.PlayerHands[partnerGuid],
+                hand = session.PlayerHands[partnerGuid],
                 partnerId = playerGuid
             };
 
