@@ -48,7 +48,7 @@ namespace tycoonAPI.Controllers
 
             // Add to pot and clear passes
             session.Pot.Add(request.HandPlayed);
-            ClearPotAfterThreePasses(session);
+            ClearPotAfterPasses(session);
 
             // If player emptied their hand => finish handling
             if (request.HandSize == 0)
@@ -242,7 +242,7 @@ namespace tycoonAPI.Controllers
                 {
                     type = "round_start",
                     round = session.RoundNumber,
-                    pot=session.Pot,
+                    pot = session.Pot,
                     hand = session.PlayerHands[id],
                     turnOrder = session.TurnOrder,
                     nextPlayer = session.CurrentTurnPlayerId,
@@ -286,12 +286,14 @@ namespace tycoonAPI.Controllers
             return rotated;
         }
 
-        private static void ClearPotAfterThreePasses(GameSession session)
+        private static void ClearPotAfterPasses(GameSession session)
         {
+            var requiredPasses = Math.Max(1, session.TurnOrder.Count - 1);
             var pot = session.Pot;
-            for (int i = 0; i + 2 < pot.Count; i++)
+
+            for (int i = 0; i + requiredPasses - 1 < pot.Count; i++)
             {
-                if (pot.Skip(i).Take(3).All(p => p == null || p.Length == 0))
+                if (pot.Skip(i).Take(requiredPasses).All(p => p == null || p.Length == 0))
                 {
                     pot.Clear();
                     return;
