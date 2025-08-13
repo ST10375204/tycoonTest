@@ -70,7 +70,7 @@ namespace tycoonAPI.Controllers
                     {
                         try
                         {
-                            await c.Response.WriteAsync("data: Game ended due to player disconnect.\n\n");
+                            await c.Response.WriteAsync("message: Game ended due to player disconnect.\n\n");
                             await c.Response.Body.FlushAsync();
                             c.Response.Body.Close();
                         }
@@ -85,7 +85,7 @@ namespace tycoonAPI.Controllers
             }
         }
 
-        [HttpPost("test")]
+        [HttpPost("sendMessage")]
         public async Task<IActionResult> PostTest([FromQuery] string data, [FromQuery] int id)
         {
             if (_gameSessions.TryGetValue(id, out var session))
@@ -94,16 +94,18 @@ namespace tycoonAPI.Controllers
                 {
                     try
                     {
-                        await client.Response.WriteAsync(
-                             $"data: {data}\n" +
-                             $"data: gameId: {id}\n\n"
-                             );
+                        await client.Response.WriteAsync($"message: {data}\n\n");
                         await client.Response.Body.FlushAsync();
                     }
-                    catch { }
+                    catch
+                    {
+                        // ignore exceptions for now
+                    }
                 }
             }
-            return Ok(new { status = "Message broadcasted", id, data });
+
+            return Ok(new { message = data });
         }
+
     }
 }
