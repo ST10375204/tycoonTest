@@ -70,7 +70,7 @@ namespace tycoonAPI.Controllers
                     {
                         try
                         {
-                            await c.Response.WriteAsync("message: Game ended due to player disconnect.\n\n");
+                            await c.Response.WriteAsync("data: message: Game ended due to player disconnect.\n\n");
                             await c.Response.Body.FlushAsync();
                             c.Response.Body.Close();
                         }
@@ -94,7 +94,8 @@ namespace tycoonAPI.Controllers
                 {
                     try
                     {
-                        await client.Response.WriteAsync($"message: {data}\n\n");
+                        await client.Response.WriteAsync($"data: message:{data}\n\n");
+
                         await client.Response.Body.FlushAsync();
                     }
                     catch
