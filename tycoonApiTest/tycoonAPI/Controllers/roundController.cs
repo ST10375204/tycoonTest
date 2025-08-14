@@ -115,7 +115,7 @@ namespace tycoonAPI.Controllers
                 roundResults = session.RoundResults.Count > 0
                     ? session.RoundResults[session.RoundNumber - 1]
                     : new List<Guid>(),
-                remainingCards 
+                remainingCards
             };
             await BroadcastToAllAsync(session, playPayload);
 
@@ -248,12 +248,14 @@ namespace tycoonAPI.Controllers
         {
             // Deal
             var hands = _deck.DealAllHands();
-            var remainingCards = session.PlayerHands
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
+
             var players = session.Clients.Keys.ToList();
             session.PlayerHands = players
                 .Zip(hands, (id, hand) => (id, hand))
                 .ToDictionary(x => x.id, x => x.hand);
+
+            var remainingCards = session.PlayerHands
+    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
 
             // Determine order based on round rules
             session.TurnOrder = DetermineInitialOrder(session, players, hands);
@@ -278,7 +280,7 @@ namespace tycoonAPI.Controllers
                     turnOrder = session.TurnOrder,
                     nextPlayer = session.CurrentTurnPlayerId,
                     position = pos,
-                    remainingCards 
+                    remainingCards
                 };
                 var data = JsonSerializer.Serialize(payload);
                 await client.Response.WriteAsync($"data: {data}\n\n");
