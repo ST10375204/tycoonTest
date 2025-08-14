@@ -38,6 +38,7 @@ namespace tycoonAPI.Controllers
             await HandlePlayAsync(session, request);
             return Ok();
         }
+
         private async Task HandlePlayAsync(GameSession session, PlayRequest request)
         {
             if (!Guid.TryParse(request.PlayerId, out var pid))
@@ -46,12 +47,34 @@ namespace tycoonAPI.Controllers
             int idx = session.TurnOrder.IndexOf(pid);
             if (idx < 0) return;
 
-            // Add to pot and clear passes
+            // Defensive: check player's hand exists
+            if (!session.PlayerHands.ContainsKey(pid))
+                return;
+
+            var currentHand = session.PlayerHands[pid].ToList();
+
+            // 1. Validate played cards
+            foreach (var card in request.HandPlayed)
+            {
+                if (string.IsNullOrEmpty(card) || !currentHand.Contains(card))
+                    throw new InvalidOperationException($"Card '{card}' not found in player's hand.");
+            }
+
+            // 2. Remove played cards from player's hand
+            foreach (var card in request.HandPlayed)
+            {
+                currentHand.Remove(card);
+            }
+
+            // Update stored hand
+            session.PlayerHands[pid] = currentHand.ToArray();
+
+            // 3. Add to pot and clear passes
             session.Pot.Add(request.HandPlayed);
             ClearPotAfterPasses(session);
 
             // If player emptied their hand => finish handling
-            if (request.HandSize == 0)
+            if (currentHand.Count == 0)
             {
                 HandlePlayerFinished(session, pid, idx);
             }
@@ -77,17 +100,22 @@ namespace tycoonAPI.Controllers
                 }
             }
 
+            // Build remainingCards map
+            var remainingCards = session.PlayerHands
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
+
             // Broadcast play update
             var playPayload = new
             {
                 type = "play_update",
                 pot = session.Pot,
                 playType = request.PlayType,
-                revolution = (request.HandSize == 4),
+                revolution = (request.HandPlayed.Length == 4),
                 nextPlayer = session.CurrentTurnPlayerId,
                 roundResults = session.RoundResults.Count > 0
                     ? session.RoundResults[session.RoundNumber - 1]
-                    : new List<Guid>()
+                    : new List<Guid>(),
+                remainingCards // <-- NEW field
             };
             await BroadcastToAllAsync(session, playPayload);
 
@@ -117,6 +145,7 @@ namespace tycoonAPI.Controllers
                 await EndRoundAsync(session);
             }
         }
+
 
         private void HandlePlayerFinished(GameSession session, Guid finisher, int removedIndex)
         {

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("tycoonAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8895ee7097f97e72a91712ecf7fec2fdcfde0d6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+eda5d0390bb5222bc1252ad9f2bb5e5aa2a4fdad")]
 [assembly: System.Reflection.AssemblyProductAttribute("tycoonAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("tycoonAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
