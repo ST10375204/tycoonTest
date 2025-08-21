@@ -54,73 +54,95 @@ namespace tycoonAPI.Controllers
 
             var currentHand = session.PlayerHands[pid].ToList();
 
-            // Validate played cards
-            foreach (var card in request.HandPlayed)
+            // 1. Validate played cards (passes are allowed as empty arrays)
+            foreach (var card in request.HandPlayed ?? Array.Empty<string>())
             {
-                if (string.IsNullOrEmpty(card) || !currentHand.Contains(card))
+                if (!string.IsNullOrEmpty(card) && !currentHand.Contains(card))
                     throw new InvalidOperationException($"Card '{card}' not found in player's hand.");
             }
 
-            // Remove played cards from player's hand
-            foreach (var card in request.HandPlayed)
+            // 2. Remove played cards from player's hand (no-op for passes)
+            foreach (var card in request.HandPlayed ?? Array.Empty<string>())
             {
-                currentHand.Remove(card);
+                if (!string.IsNullOrEmpty(card))
+                    currentHand.Remove(card);
             }
 
             // Update stored hand
             session.PlayerHands[pid] = currentHand.ToArray();
 
-            // Add to pot and clear passes
-            session.Pot.Add(request.HandPlayed);
+            // 3. Add to pot and clear passes
+            session.Pot.Add(request.HandPlayed ?? Array.Empty<string>());
             ClearPotAfterPasses(session);
 
-            if (request.HandSize == 0)
+            // Remember whether this play emptied the player's hand
+            bool playerFinished = (request.HandSize == 0);
+
+            // If player finished, handle finish now (this will remove from TurnOrder and set CurrentTurnPlayerId appropriately)
+            if (playerFinished)
             {
                 HandlePlayerFinished(session, pid, idx);
-             }
-
-            // Determine previous play (the play that was on the pot before this play).
-            string[] previousPlay = session.Pot.Count >= 2 ? session.Pot[session.Pot.Count - 2] : Array.Empty<string>();
-
-            // Helper booleans for special cases
-            bool containsEight = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsRankEight(c));
-
-            // Current play is a single 3♠?
-            bool currentIsSingleThreeSpades = request.HandPlayed.Length == 1
-                && !string.IsNullOrEmpty(request.HandPlayed[0])
-                && IsThreeOfSpades(request.HandPlayed[0]);
-
-            // Previous play was a single Joker?
-            bool previousWasSingleJoker = previousPlay.Length == 1
-                && !string.IsNullOrEmpty(previousPlay[0])
-                && IsJoker(previousPlay[0]);
-
-            // Special case: if current is single 3♠ and previous was single Joker, we clear pot and keep turn
-            if (containsEight || (currentIsSingleThreeSpades && previousWasSingleJoker))
-            {
-                // Special-case: clear pot and keep turn with this player
-                session.Pot.Clear();
-                session.CurrentTurnPlayerId = pid;
             }
-            else
+
+            // Find previous non-pass play BEFORE the current play (passes are null/empty arrays).
+            // Start at pot.Count - 2 (the entry just before the current one) and scan backwards skipping empty plays.
+            string[] previousNonPassPlay = Array.Empty<string>();
+            for (int search = session.Pot.Count - 2; search >= 0; search--)
             {
-                // Normal rotation — guard against empty TurnOrder
-                if (session.TurnOrder.Count > 0)
+                var candidate = session.Pot[search];
+                if (candidate != null && candidate.Length > 0)
                 {
-                    session.CurrentTurnPlayerId = session.TurnOrder[(idx + 1) % session.TurnOrder.Count];
+                    previousNonPassPlay = candidate;
+                    break;
+                }
+            }
+
+            // Only evaluate special "keep turn" rules if the player did NOT finish (a finished player can't keep the turn)
+            if (!playerFinished)
+            {
+                // Helper booleans for special cases
+                bool containsEight = (request.HandPlayed ?? Array.Empty<string>()).Any(c => !string.IsNullOrEmpty(c) && IsRankEight(c));
+
+                // Current play is a single 3♠?
+                bool currentIsSingleThreeSpades = (request.HandPlayed?.Length ?? 0) == 1
+                    && !string.IsNullOrEmpty(request.HandPlayed[0])
+                    && IsThreeOfSpades(request.HandPlayed[0]);
+
+                // Previous non-pass play was a single Joker?
+                bool previousWasSingleJoker = (previousNonPassPlay?.Length ?? 0) == 1
+                    && !string.IsNullOrEmpty(previousNonPassPlay[0])
+                    && IsJoker(previousNonPassPlay[0]);
+
+                // Special-case: 8 clears pot OR single 3♠ trumps single Joker -> clear pot and keep turn
+                if (containsEight || (currentIsSingleThreeSpades && previousWasSingleJoker))
+                {
+                    session.Pot.Clear();
+                    session.CurrentTurnPlayerId = pid;
                 }
                 else
                 {
-                    session.CurrentTurnPlayerId = Guid.Empty;
+                    // Normal rotation — guard against empty TurnOrder
+                    if (session.TurnOrder.Count > 0)
+                    {
+                        // Recompute index in case TurnOrder changed elsewhere; idx should still be valid here because player didn't finish.
+                        int curIdx = session.TurnOrder.IndexOf(pid);
+                        if (curIdx >= 0)
+                            session.CurrentTurnPlayerId = session.TurnOrder[(curIdx + 1) % session.TurnOrder.Count];
+                        else
+                            session.CurrentTurnPlayerId = Guid.Empty;
+                    }
+                    else
+                    {
+                        session.CurrentTurnPlayerId = Guid.Empty;
+                    }
                 }
-
             }
 
             // Build remainingCards map
             var remainingCards = session.PlayerHands
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
 
-            // Broadcast play update (server authoritative for revolution)
+            // Broadcast play update (server authoritative for revolution). Include lastNonPassPlay to help clients
             var playPayload = new
             {
                 type = "play_update",
@@ -131,7 +153,10 @@ namespace tycoonAPI.Controllers
                 roundResults = session.RoundResults.Count > 0
                     ? session.RoundResults[session.RoundNumber - 1]
                     : new List<Guid>(),
-                remainingCards
+                remainingCards,
+                // helpful do not remove deevee I know you want to
+                lastNonPassPlay = previousNonPassPlay,   // may be empty
+                lastPlayedBy = pid                        // the player who issued this play
             };
             await BroadcastToAllAsync(session, playPayload);
 
