@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace tycoonAPI.Controllers
 {
@@ -80,9 +81,37 @@ namespace tycoonAPI.Controllers
             }
             else
             {
-                // Play of an 8 keeps turn and clears pot or if Joker played with 3S together for efficiency
-                 if (request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && c.Contains("8")) || request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && c.Contains("3S") && session.Pot[session.Pot.Count - 1].Contains("Joker")) && session.Pot[session.Pot.Count - 1].Length==2 )
-               {
+                // Normal rotation vs special rules:
+                // - Play of an 8 keeps turn and clears pot
+                // - Playing Joker + 3♠ together in the same play clears pot & keeps turn (the server's previous code had a brittle check)
+                // We'll use tolerant helpers to detect these patterns.
+                bool containsEight = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsRankEight(c));
+                bool jokerPlusThreeSpadesCombo = false;
+
+                // If the last pot entry exists and we added this play as last item:
+                if (session.Pot.Count > 0)
+                {
+                    var lastPlay = session.Pot[session.Pot.Count - 1];
+                    // detect the combo either within the current play or across the last play depending on your rule:
+                    // original code tried: request has 3S and last pot contains Joker and last pot length == 2
+                    // we'll maintain behaviour but robustly:
+                    bool thisPlayHas3S = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsThreeOfSpades(c));
+                    bool lastPlayHasJoker = lastPlay.Any(c => !string.IsNullOrEmpty(c) && IsJoker(c));
+
+                    // If both true and combined length is 2 (as original code), treat as combo
+                    if (thisPlayHas3S && lastPlayHasJoker && (lastPlay.Length == 1 && request.HandPlayed.Length == 1))
+                    {
+                        jokerPlusThreeSpadesCombo = true;
+                    }
+
+                    // Also accept when both were played together (current play contains both Joker and 3S)
+                    bool thisPlayContainsBoth = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsJoker(c))
+                                                && request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsThreeOfSpades(c));
+                    if (thisPlayContainsBoth) jokerPlusThreeSpadesCombo = true;
+                }
+
+                if (containsEight || jokerPlusThreeSpadesCombo)
+                {
                     session.Pot.Clear();
                     session.CurrentTurnPlayerId = pid;
                 }
@@ -104,13 +133,13 @@ namespace tycoonAPI.Controllers
             var remainingCards = session.PlayerHands
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
 
-            // Broadcast play update
+            // Broadcast play update (server authoritative for revolution)
             var playPayload = new
             {
                 type = "play_update",
                 pot = session.Pot,
                 playType = request.PlayType,
-                revolution = (request.HandPlayed.Length == 4),
+                revolution = (request.HandPlayed?.Length ?? 0) == 4,
                 nextPlayer = session.CurrentTurnPlayerId,
                 roundResults = session.RoundResults.Count > 0
                     ? session.RoundResults[session.RoundNumber - 1]
@@ -145,7 +174,6 @@ namespace tycoonAPI.Controllers
                 await EndRoundAsync(session);
             }
         }
-
 
         private void HandlePlayerFinished(GameSession session, Guid finisher, int removedIndex)
         {
@@ -229,12 +257,13 @@ namespace tycoonAPI.Controllers
 
         private async Task EndRoundAsync(GameSession session)
         {
-            // Broadcast round_end
-            await BroadcastToAllAsync(session, new
+            // Broadcast round_end (typed)
+            var payload = new
             {
                 type = "round_end",
                 results = session.RoundResults[session.RoundNumber - 1]
-            });
+            };
+            await BroadcastToAllAsync(session, payload);
 
             // Clear pot and prepare next round
             session.Pot.Clear();
@@ -255,7 +284,7 @@ namespace tycoonAPI.Controllers
                 .ToDictionary(x => x.id, x => x.hand);
 
             var remainingCards = session.PlayerHands
-    .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Length);
 
             // Determine order based on round rules
             session.TurnOrder = DetermineInitialOrder(session, players, hands);
@@ -265,7 +294,7 @@ namespace tycoonAPI.Controllers
             while (session.RoundResults.Count <= roundIdx)
                 session.RoundResults.Add(new List<Guid>());
 
-            // Broadcast round_start to all players with their hand and the turn order
+            // Broadcast round_start to all players with their hand and the turn order (private per-player)
             session.CurrentTurnPlayerId = session.TurnOrder.Count > 0 ? session.TurnOrder[0] : Guid.Empty;
             for (int pos = 0; pos < session.TurnOrder.Count; pos++)
             {
@@ -282,9 +311,7 @@ namespace tycoonAPI.Controllers
                     position = pos,
                     remainingCards
                 };
-                var data = JsonSerializer.Serialize(payload);
-                await client.Response.WriteAsync($"data: {data}\n\n");
-                await client.Response.Body.FlushAsync();
+                await SendPrivateSseAsync(session, id, payload);
             }
         }
 
@@ -507,5 +534,44 @@ namespace tycoonAPI.Controllers
             }
         }
 
+        // ----- Card string helpers (tolerant parsing) -----
+        private static string NormalizeAlnum(string? s)
+        {
+            if (string.IsNullOrEmpty(s)) return string.Empty;
+            return Regex.Replace(s, @"[^A-Za-z0-9]", string.Empty).ToUpperInvariant();
+        }
+
+        private static bool IsJoker(string? card)
+        {
+            if (string.IsNullOrEmpty(card)) return false;
+            var an = NormalizeAlnum(card);
+            return an.Contains("JOKER") || an.Contains("RJ") || an.Contains("BJ") || an.Contains("JOKERRED") || an.Contains("JOKERBLACK");
+        }
+
+        private static bool IsThreeOfSpades(string? card)
+        {
+            if (string.IsNullOrEmpty(card)) return false;
+            var an = NormalizeAlnum(card);
+            if (an.Length == 0) return false;
+            // Typical forms: "3S", "3SPADES", "3_S", etc.
+            if (an.EndsWith("S")) // last char indicates suit
+            {
+                var rankPart = an.Substring(0, an.Length - 1);
+                return rankPart == "3" || rankPart == "03";
+            }
+            // fallback: exact match
+            return an == "3S";
+        }
+
+        private static bool IsRankEight(string? card)
+        {
+            if (string.IsNullOrEmpty(card)) return false;
+            var an = NormalizeAlnum(card);
+            // Accept "8", "08", "8H", "8S", etc.
+            if (an.Length == 0) return false;
+            if (an.StartsWith("8")) return true;
+            // look for patterns containing "8" as rank
+            return Regex.IsMatch(an, @"(^|[^0-9])8($|[^0-9])");
+        }
     }
 }
