@@ -80,9 +80,9 @@ namespace tycoonAPI.Controllers
             }
             else
             {
-                // Play of an 8 keeps turn and clears pot
-                if (request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && c.Contains("8")))
-                {
+                // Play of an 8 keeps turn and clears pot or if Joker played with 3S together for efficiency
+                 if (request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && c.Contains("8")) || request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && c.Contains("3S") && session.Pot[session.Pot.Count - 1].Contains("Joker")))
+               {
                     session.Pot.Clear();
                     session.CurrentTurnPlayerId = pid;
                 }
