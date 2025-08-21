@@ -54,14 +54,14 @@ namespace tycoonAPI.Controllers
 
             var currentHand = session.PlayerHands[pid].ToList();
 
-            // 1. Validate played cards
+            // Validate played cards
             foreach (var card in request.HandPlayed)
             {
                 if (string.IsNullOrEmpty(card) || !currentHand.Contains(card))
                     throw new InvalidOperationException($"Card '{card}' not found in player's hand.");
             }
 
-            // 2. Remove played cards from player's hand
+            // Remove played cards from player's hand
             foreach (var card in request.HandPlayed)
             {
                 currentHand.Remove(card);
@@ -70,63 +70,50 @@ namespace tycoonAPI.Controllers
             // Update stored hand
             session.PlayerHands[pid] = currentHand.ToArray();
 
-            // 3. Add to pot and clear passes
+            // Add to pot and clear passes
             session.Pot.Add(request.HandPlayed);
             ClearPotAfterPasses(session);
 
-            // If player emptied their hand => finish handling
-            if (currentHand.Count == 0)
+            if (request.HandSize == 0)
             {
                 HandlePlayerFinished(session, pid, idx);
+             }
+
+            // Determine previous play (the play that was on the pot before this play).
+            string[] previousPlay = session.Pot.Count >= 2 ? session.Pot[session.Pot.Count - 2] : Array.Empty<string>();
+
+            // Helper booleans for special cases
+            bool containsEight = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsRankEight(c));
+
+            // Current play is a single 3♠?
+            bool currentIsSingleThreeSpades = request.HandPlayed.Length == 1
+                && !string.IsNullOrEmpty(request.HandPlayed[0])
+                && IsThreeOfSpades(request.HandPlayed[0]);
+
+            // Previous play was a single Joker?
+            bool previousWasSingleJoker = previousPlay.Length == 1
+                && !string.IsNullOrEmpty(previousPlay[0])
+                && IsJoker(previousPlay[0]);
+
+            // Special case: if current is single 3♠ and previous was single Joker, we clear pot and keep turn
+            if (containsEight || (currentIsSingleThreeSpades && previousWasSingleJoker))
+            {
+                // Special-case: clear pot and keep turn with this player
+                session.Pot.Clear();
+                session.CurrentTurnPlayerId = pid;
             }
             else
             {
-                // Normal rotation vs special rules:
-                // - Play of an 8 keeps turn and clears pot
-                // - Playing Joker + 3♠ together in the same play clears pot & keeps turn (the server's previous code had a brittle check)
-                // We'll use tolerant helpers to detect these patterns.
-                bool containsEight = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsRankEight(c));
-                bool jokerPlusThreeSpadesCombo = false;
-
-                // If the last pot entry exists and we added this play as last item:
-                if (session.Pot.Count > 0)
+                // Normal rotation — guard against empty TurnOrder
+                if (session.TurnOrder.Count > 0)
                 {
-                    var lastPlay = session.Pot[session.Pot.Count - 1];
-                    // detect the combo either within the current play or across the last play depending on your rule:
-                    // original code tried: request has 3S and last pot contains Joker and last pot length == 2
-                    // we'll maintain behaviour but robustly:
-                    bool thisPlayHas3S = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsThreeOfSpades(c));
-                    bool lastPlayHasJoker = lastPlay.Any(c => !string.IsNullOrEmpty(c) && IsJoker(c));
-
-                    // If both true and combined length is 2 (as original code), treat as combo
-                    if (thisPlayHas3S && lastPlayHasJoker && (lastPlay.Length == 1 && request.HandPlayed.Length == 1))
-                    {
-                        jokerPlusThreeSpadesCombo = true;
-                    }
-
-                    // Also accept when both were played together (current play contains both Joker and 3S)
-                    bool thisPlayContainsBoth = request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsJoker(c))
-                                                && request.HandPlayed.Any(c => !string.IsNullOrEmpty(c) && IsThreeOfSpades(c));
-                    if (thisPlayContainsBoth) jokerPlusThreeSpadesCombo = true;
-                }
-
-                if (containsEight || jokerPlusThreeSpadesCombo)
-                {
-                    session.Pot.Clear();
-                    session.CurrentTurnPlayerId = pid;
+                    session.CurrentTurnPlayerId = session.TurnOrder[(idx + 1) % session.TurnOrder.Count];
                 }
                 else
                 {
-                    // Normal rotation — guard against empty TurnOrder
-                    if (session.TurnOrder.Count > 0)
-                    {
-                        session.CurrentTurnPlayerId = session.TurnOrder[(idx + 1) % session.TurnOrder.Count];
-                    }
-                    else
-                    {
-                        session.CurrentTurnPlayerId = Guid.Empty;
-                    }
+                    session.CurrentTurnPlayerId = Guid.Empty;
                 }
+
             }
 
             // Build remainingCards map
