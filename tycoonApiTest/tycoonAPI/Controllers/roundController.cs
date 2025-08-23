@@ -113,29 +113,42 @@ namespace tycoonAPI.Controllers
                     && !string.IsNullOrEmpty(previousNonPassPlay[0])
                     && IsJoker(previousNonPassPlay[0]);
 
-                // Special-case: 8 clears pot OR single 3♠ trumps single Joker -> clear pot and keep turn
-                if (containsEight || (currentIsSingleThreeSpades && previousWasSingleJoker))
+                bool isFirstPlayEver = session.Pot.Count == 1 && session.RoundNumber == 1;
+
+                if (!isFirstPlayEver)
                 {
-                    session.Pot.Clear();
-                    session.CurrentTurnPlayerId = pid;
-                }
-                else
-                {
-                    // Normal rotation — guard against empty TurnOrder
-                    if (session.TurnOrder.Count > 0)
+                    if (containsEight || (currentIsSingleThreeSpades && previousWasSingleJoker))
                     {
-                        // Recompute index in case TurnOrder changed elsewhere; idx should still be valid here because player didn't finish.
-                        int curIdx = session.TurnOrder.IndexOf(pid);
-                        if (curIdx >= 0)
-                            session.CurrentTurnPlayerId = session.TurnOrder[(curIdx + 1) % session.TurnOrder.Count];
-                        else
-                            session.CurrentTurnPlayerId = Guid.Empty;
+                        session.Pot.Clear();
+                        session.CurrentTurnPlayerId = pid;
                     }
                     else
                     {
-                        session.CurrentTurnPlayerId = Guid.Empty;
+                        // normal rotation
+                        if (session.TurnOrder.Count > 0)
+                        {
+                              // Normal rotation — guard against empty TurnOrder
+                            // Recompute index in case TurnOrder changed elsewhere; idx should still be valid here because player didn't finish.
+                            int curIdx = session.TurnOrder.IndexOf(pid);
+                            if (curIdx >= 0)
+                                session.CurrentTurnPlayerId = session.TurnOrder[(curIdx + 1) % session.TurnOrder.Count];
+                            else
+                                session.CurrentTurnPlayerId = Guid.Empty;
+                        }
+                        else
+                        {
+                            session.CurrentTurnPlayerId = Guid.Empty;
+                        }
                     }
                 }
+                else
+                {
+                    // Just rotate normally — don’t apply special cases on first play
+                    int curIdx = session.TurnOrder.IndexOf(pid);
+                    if (curIdx >= 0)
+                        session.CurrentTurnPlayerId = session.TurnOrder[(curIdx + 1) % session.TurnOrder.Count];
+                }
+
             }
 
             // Build remainingCards map
