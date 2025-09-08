@@ -127,7 +127,7 @@ namespace tycoonAPI.Controllers
                         // normal rotation
                         if (session.TurnOrder.Count > 0)
                         {
-                              // Normal rotation — guard against empty TurnOrder
+                            // Normal rotation — guard against empty TurnOrder
                             // Recompute index in case TurnOrder changed elsewhere; idx should still be valid here because player didn't finish.
                             int curIdx = session.TurnOrder.IndexOf(pid);
                             if (curIdx >= 0)
@@ -340,14 +340,15 @@ namespace tycoonAPI.Controllers
             }
         }
 
-        private List<Guid> DetermineInitialOrder(
-            GameSession session,
-            List<Guid> players,
-            List<string[]> hands)
+        private List<Guid> DetermineInitialOrder(GameSession session, List<Guid> players, List<string[]> hands)
         {
+            // Defensive fallback
+            if (players == null || players.Count == 0)
+                return new List<Guid>();
+
+            // ROUND 1: find player with 3♦ and rotate original players list
             if (session.RoundNumber == 1)
             {
-                // Round 1: find player with 3♦ and rotate the original players list
                 var starter = players
                     .Select((id, idx) => new { id, hand = hands[idx] })
                     .First(x => x.hand.Contains("3D")).id;
@@ -356,20 +357,79 @@ namespace tycoonAPI.Controllers
                 return players.Skip(startIdx).Concat(players.Take(startIdx)).ToList();
             }
 
-            // baseOrder = exact round1 finish order (1st..4th)
-            var baseOrder = new List<Guid>(session.RoundResults[0]);
+            // Helper to safely fetch a finished-order list by 1-based round number
+            List<Guid> GetRoundFinishes(int roundOneBased)
+            {
+                int idx = roundOneBased - 1;
+                if (session.RoundResults != null && session.RoundResults.Count > idx)
+                    return new List<Guid>(session.RoundResults[idx]);
+                return new List<Guid>();
+            }
 
-            // prevRound finishes (exact)
-            var prevFinishes = session.RoundResults[session.RoundNumber - 2];
-            var lastFinisher = prevFinishes.Last();
+            // ROUND 2: base is round 1 finish order, rotate so round1-last starts
+            if (session.RoundNumber == 2)
+            {
+                var baseOrder = GetRoundFinishes(1); // round 1 finishes
+                if (baseOrder.Count == 0)
+                    return players.ToList();
 
-            // rotate baseOrder so last finisher of previous round starts
-            int pivot = baseOrder.IndexOf(lastFinisher);
-            if (pivot < 0) pivot = 0;
-            var rotated = baseOrder.Skip(pivot).Concat(baseOrder.Take(pivot)).ToList();
+                // last finisher of previous round (prevFinishes is round1 here)
+                var lastFinisher = baseOrder.Last();
+                int pivot = baseOrder.IndexOf(lastFinisher);
+                if (pivot < 0) pivot = 0;
+                return baseOrder.Skip(pivot).Concat(baseOrder.Take(pivot)).ToList();
+            }
 
-            // Round 2 & 3: same cyclic behavior per your rules (Round 2 special is handled when someone finishes)
-            return rotated;
+            // ROUND 3: base = round 1 finish order (same as round 2)
+            // Special: if round2 winner != round1 winner => treat round1 winner as "loser" (i.e., pivot on round1 winner)
+            if (session.RoundNumber == 3)
+            {
+                var baseOrder = GetRoundFinishes(1); // round 1 finishes used as canonical base
+                var round2Finishes = GetRoundFinishes(2); // round 2 finishes
+                if (baseOrder.Count == 0)
+                    return players.ToList();
+
+                // Determine pivot:
+                // - If round2 data exists and round2 winner differs from round1 winner, pivot on round1 winner.
+                // - Otherwise pivot on the actual last finisher of round2 (if available), else fallback to baseOrder.Last()
+                Guid pivotGuid;
+                var round1Winner = baseOrder[0];
+                if (round2Finishes.Count > 0)
+                {
+                    var round2Winner = round2Finishes[0];
+                    if (round2Winner != round1Winner)
+                    {
+                        // Force the round1 winner to be treated as loser (pivot on them)
+                        pivotGuid = round1Winner;
+                    }
+                    else
+                    {
+                        // Normal: pivot on last finisher of round2
+                        pivotGuid = round2Finishes.Last();
+                    }
+                }
+                else
+                {
+                    // No round2 data: fallback to last of base
+                    pivotGuid = baseOrder.Last();
+                }
+
+                int pivot = baseOrder.IndexOf(pivotGuid);
+                if (pivot < 0) pivot = 0;
+                return baseOrder.Skip(pivot).Concat(baseOrder.Take(pivot)).ToList();
+            }
+
+            // ROUND 4+: use the previous round's finish order and rotate so its last finisher starts
+            {
+                var prevFinishes = GetRoundFinishes(session.RoundNumber - 1);
+                if (prevFinishes.Count == 0)
+                    return players.ToList();
+
+                var lastFinisher = prevFinishes.Last();
+                int pivot = prevFinishes.IndexOf(lastFinisher);
+                if (pivot < 0) pivot = 0;
+                return prevFinishes.Skip(pivot).Concat(prevFinishes.Take(pivot)).ToList();
+            }
         }
 
         private static void ClearPotAfterPasses(GameSession session)
@@ -383,7 +443,7 @@ namespace tycoonAPI.Controllers
                 {
                     pot.Clear();
                     return;
-                }
+                } 
             }
         }
 
